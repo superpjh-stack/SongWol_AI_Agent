@@ -15,14 +15,17 @@ def client(tmp_path, monkeypatch):
 
 def test_workspace_documents_and_allowed_tables(client):
     workspace = client.get('/api/workspace').json()
-    assert len(workspace['lots']) == 3
-    assert all(len(v) == 10 for v in workspace['questions'].values())
+    assert len(workspace['lots']) == 10
+    assert sum(map(len, workspace['questions'].values())) == 10
+    assert all(len(v) == 5 for v in workspace['questions'].values())
     assert workspace['meta']['demo_data'] is True
     docs = client.get('/api/documents?q=인쇄').json()
     assert docs and all('미승인' in d['approval'] and '상태: 미승인' in d['body'] for d in docs)
     assert client.get('/api/documents?q=zzzzzz').json() == []
     for table in workspace['tables']:
-        assert client.get('/api/tables/' + table).status_code == 200
+        records = client.get('/api/tables/' + table)
+        assert records.status_code == 200
+        assert len(records.json()) == 10, table
     assert client.get('/api/tables/sqlite_master').status_code == 404
 
 
@@ -31,6 +34,7 @@ def test_lot_demo_has_records_and_documents(client):
     assert answer['mode'] == 'demo'
     assert '보류' in answer['text'] and '미승인' in answer['text']
     assert {e['kind'] for e in answer['evidence']} == {'record', 'document'}
+    assert len(client.get('/api/documents').json()) == 10
     trace = client.get('/api/lots/PRT-260901-A').json()
     assert {r['fabric_lot'] for r in trace['inventory']} == {'PRT-260901-A', 'FAB-260825-A'}
 
@@ -110,6 +114,20 @@ def test_ai_uses_server_model_and_captures_record_evidence(client, monkeypatch):
     assert response.json()['evidence'][0]['result']['quality'][0]['inspection_id'] == 'QI-260903'
     assert all(r['model'] == 'configured-model' for r in requests)
     assert 'test-key' not in response.text
+
+
+def test_demo_seeds_ten_linked_records_idempotently(client):
+    repository = client.app.state.repo
+    counts = {table: len(client.get('/api/tables/' + table).json()) for table in client.get('/api/workspace').json()['tables']}
+    assert counts == {table: 10 for table in counts}
+    assert repository.get_orders(order_no='SO-260910')[0]['item_code'] == 'TW-200-BL'
+    trace = repository.trace_lot('PRT-260905-E')
+    assert trace['order'][0]['order_no'] == 'SO-260905'
+    assert trace['quality'][0]['result'] == '보류'
+    assert trace['shipment'][0]['approval'] == '미승인'
+    with repository._connect() as connection:
+        repository._seed(connection)
+    assert {table: len(client.get('/api/tables/' + table).json()) for table in counts} == counts
 
 
 def test_realtime_session_has_all_real_handlers(client, monkeypatch):

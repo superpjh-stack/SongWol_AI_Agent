@@ -8,14 +8,12 @@ TABLES = {'orders': '수주', 'work_orders': '작업지시·인쇄 LOT', 'lot_qu
           'process_conditions': '공정조건', 'inventory': '재고', 'shipments': '출하',
           'claims': '클레임', 'master_items': '품목 기준정보'}
 QUESTIONS = {
-    '생산·품질': ['PRT-260903-C의 품질과 출하 상태를 알려줘', 'SO-260901의 생산 현황을 알려줘',
-               '전체 주문과 납기를 보여줘', '인쇄 LOT별 생산 실적을 알려줘', '조건부합격과 보류 검사를 보여줘',
-               '안전재고 미달 품목을 알려줘', '미승인 출하 목록을 보여줘', '진행 중인 클레임을 알려줘',
-               '품목별 포장단위를 알려줘', 'PRT-260902-B의 원단과 공정조건을 추적해줘'],
-    '문서·규칙': ['인쇄 품질 기준서를 찾아줘', '색상 클레임 처리절차를 알려줘', '원단 LOT 추적 SOP를 찾아줘',
-               '출하 승인 절차를 알려줘', '품질보류 해제 절차를 찾아줘', '포장 라벨 확인 절차를 알려줘',
-               '안전재고 관리 가이드를 찾아줘', '인쇄검사에 필요한 측정 기록을 알려줘',
-               '클레임 역추적 방법을 알려줘', '품목 규격 개정 관리 절차를 찾아줘']}
+    '생산·품질': ['PRT-260903-C의 품질과 출하 상태를 알려줘', 'SO-260904의 생산 진행 현황을 알려줘',
+               '안전재고 미달 품목을 알려줘', '미승인 출하 목록을 보여줘', '진행 중인 클레임을 알려줘'],
+    '문서·규칙': ['인쇄 품질 기준서의 검사 기록 항목을 알려줘', '원단 LOT 입고 검사 절차를 알려줘',
+               '포장 라벨 대조 절차를 알려줘', '출하 인계 체크리스트를 알려줘',
+               '문서 개정과 기록 정정 규칙을 알려줘']}
+
 
 def stamp():
     return datetime.now(timezone.utc).isoformat()
@@ -63,7 +61,7 @@ def demo_answer(repo, question, lot):
         registry.execute('get_item_master', {'item_code': None})
     elif any(word in q for word in ['주문', '납기', '수주']):
         registry.execute('get_orders', {'order_no': None, 'status': None})
-    keyword = next((word for word in ['클레임', '출하', '재고', '품질', '인쇄', 'LOT', '포장', '규격'] if word.lower() in q), None)
+    keyword = next((word for word in ['클레임', '출하', '재고', '품질', '인쇄', 'LOT', '포장', '규격', '정정'] if word.lower() in q), None)
     if keyword:
         registry.execute('search_documents', {'query': keyword})
     lines = ['데모 조회 결과입니다. 정해진 키워드로 원본 DB·문서를 조회했으며 AI 분석은 수행하지 않았습니다.']
