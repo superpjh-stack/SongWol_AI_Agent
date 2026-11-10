@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,17 @@ class SongwolRepository:
     def __init__(self, db_path: str | Path) -> None:
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
+        self.is_mes_data = self._has_mes_meta()
         self._initialize()
+
+    def _has_mes_meta(self) -> bool:
+        if not self.db_path.exists():
+            return False
+        try:
+            with sqlite3.connect(self.db_path) as connection:
+                return bool(connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='mes_meta'").fetchone())
+        except sqlite3.Error:
+            return False
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
@@ -62,7 +73,8 @@ class SongwolRepository:
         with self._connect() as connection:
             connection.executescript(schema)
             # Idempotently extend existing demo DBs as well as initializing new ones.
-            self._seed(connection)
+            if not self.is_mes_data:
+                self._seed(connection)
 
     @staticmethod
     def _seed(connection: sqlite3.Connection) -> None:
@@ -172,6 +184,12 @@ class SongwolRepository:
             return self._rows(connection.execute(sql, params))
 
     def summary(self) -> dict[str, int]:
+        if self.is_mes_data:
+            with self._connect() as connection:
+                open_orders = connection.execute("SELECT COUNT(*) FROM mes_orders").fetchone()[0]
+                stock_issues = sum(1 for row in self.get_mes_inventory(issues_only=True, limit=500) if row.get("품번"))
+                shipment_pending = sum(1 for row in self.get_mes_shipments(unshipped_only=True, limit=500) if row.get("수주번호"))
+                return {"open_orders": open_orders, "quality_holds": 0, "stock_issues": stock_issues, "shipment_pending": shipment_pending}
         with self._connect() as connection:
             return {
                 "open_orders": connection.execute("SELECT COUNT(*) FROM orders WHERE status != '완료'").fetchone()[0],
@@ -262,3 +280,78 @@ class SongwolRepository:
 
     def get_item_master(self, item_code: str | None = None) -> list[dict[str, Any]]:
         return self._query("SELECT * FROM master_items" + (" WHERE item_code = ?" if item_code else "") + " ORDER BY item_code", (item_code,) if item_code else ())
+
+    def mes_meta(self) -> dict[str, str]:
+        if not self.is_mes_data:
+            return {}
+        return {row["key"]: row["value"] for row in self._query("SELECT key, value FROM mes_meta")}
+
+    def _mes_rows(self, table: str) -> list[dict[str, Any]]:
+        rows = self._query(f"SELECT source_sheet, source_row, payload FROM {table} ORDER BY source_row")
+        result = []
+        for row in rows:
+            payload = json.loads(row["payload"])
+            payload["_source_sheet"] = row["source_sheet"]
+            payload["_source_row"] = row["source_row"]
+            result.append(payload)
+        return result
+
+    @staticmethod
+    def _mes_number(row: dict[str, Any], key: str) -> float:
+        try:
+            return float(str(row.get(key) or "").replace(",", ""))
+        except (TypeError, ValueError):
+            return 0.0
+
+    def get_mes_orders(self, due_before: str | None = None, unshipped_only: bool = False, limit: int = 50) -> list[dict[str, Any]]:
+        rows = [row for row in self._mes_rows("mes_orders") if not due_before or str(row.get("출고예정일") or "") <= due_before]
+        shipments = self.get_mes_shipments(unshipped_only=False, limit=100000)
+        remaining = {str(row.get("수주번호")): self._mes_number(row, "수주잔량") for row in shipments}
+        if unshipped_only:
+            rows = [row for row in rows if remaining.get(str(row.get("수주번호")), self._mes_number(row, "수량")) > 0]
+        for row in rows:
+            row["수주잔량"] = remaining.get(str(row.get("수주번호")), None)
+        return sorted(rows, key=lambda row: str(row.get("출고예정일") or "9999-99-99"))[:max(1, min(limit, 200))]
+
+    def get_mes_inventory(self, issues_only: bool = False, value_desc: bool = False, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._mes_rows("mes_inventory")
+        if issues_only:
+            rows = [row for row in rows if self._mes_number(row, "현재고") < 0 or self._mes_number(row, "현재고") == 0]
+        rows.sort(key=lambda row: self._mes_number(row, "금액"), reverse=value_desc)
+        return rows[:max(1, min(limit, 500))]
+
+    def get_mes_work_progress(self, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._mes_rows("mes_process_tracking")
+        for row in rows:
+            row["생산포장차이"] = self._mes_number(row, "생산완료") - self._mes_number(row, "포장완료")
+        return rows[:max(1, min(limit, 500))]
+
+    def get_mes_production(self, production_no: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._mes_rows("mes_production_results")
+        if production_no:
+            rows = [row for row in rows if row.get("생산번호") == production_no]
+        return rows[:max(1, min(limit, 500))]
+
+    def get_mes_material_issues(self, order_no: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._mes_rows("mes_material_issues")
+        if order_no:
+            rows = [row for row in rows if row.get("수주번호") == order_no]
+        return rows[:max(1, min(limit, 500))]
+
+    def get_mes_work_tasks(self, kind: str = "production", limit: int = 100) -> list[dict[str, Any]]:
+        table = "mes_packing" if kind == "packing" else "mes_production_work"
+        return self._mes_rows(table)[:max(1, min(limit, 500))]
+
+    def get_mes_shipments(self, unshipped_only: bool = False, due_before: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
+        rows = [row for row in self._mes_rows("mes_shipments") if not due_before or str(row.get("수주일자") or "") <= due_before]
+        if unshipped_only:
+            rows = [row for row in rows if self._mes_number(row, "수주잔량") > 0]
+        return rows[:max(1, min(limit, 500))]
+
+    def get_mes_customer_summary(self, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._mes_rows("mes_customer_summary")
+        rows.sort(key=lambda row: self._mes_number(row, "매출액"), reverse=True)
+        return rows[:max(1, min(limit, 200))]
+
+    def get_mes_kpi(self) -> list[dict[str, Any]]:
+        return [row for row in self._mes_rows("mes_kpi") if row.get("성과지표")]
