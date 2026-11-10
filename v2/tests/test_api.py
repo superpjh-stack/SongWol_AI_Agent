@@ -56,6 +56,13 @@ def test_access_and_key_protection(client):
     assert client.post('/api/chat', headers={'Origin': 'https://other.test'}, json={'question':'송월아, 상태'}).status_code == 403
 
 
+def test_public_cloudfront_origin_is_allowed_behind_proxy(client, monkeypatch):
+    monkeypatch.setenv('SONGWOL_PUBLIC_ORIGINS', 'https://songwol.example, https://d2xkg3etofx0oq.cloudfront.net')
+    response = client.post('/api/chat', headers={'Origin': 'https://d2xkg3etofx0oq.cloudfront.net'},
+                           json={'question': '송월아, 상태'})
+    assert response.status_code == 200
+
+
 def test_registry_rejects_writes(client):
     registry = Registry(client.app.state.repo)
     result = json.loads(registry.execute('delete_orders', {}))

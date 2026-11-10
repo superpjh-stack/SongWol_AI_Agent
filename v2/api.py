@@ -44,6 +44,12 @@ def local_request(request: Request):
             and not request.headers.get('forwarded') and not request.headers.get('x-forwarded-for'))
 
 
+def same_origin_request(request: Request, origin: str) -> bool:
+    allowed = {str(request.base_url).rstrip('/')}
+    allowed.update(item.strip().rstrip('/') for item in os.getenv('SONGWOL_PUBLIC_ORIGINS', '').split(',') if item.strip())
+    return origin.rstrip('/') in allowed
+
+
 def create_app(db_path=None, settings_path=None):
     app = FastAPI(title='송월타월 AI Agent V2')
     app.state.repo = SongwolRepository(db_path or os.getenv('SONGWOL_DB_PATH', str(ROOT / 'data/songwol_demo.db')))
@@ -81,7 +87,7 @@ def create_app(db_path=None, settings_path=None):
                 from fastapi.responses import JSONResponse
                 return JSONResponse({'detail': exc.detail}, status_code=exc.status_code)
             origin = request.headers.get('origin')
-            if request.method == 'POST' and origin and origin.rstrip('/') != str(request.base_url).rstrip('/'):
+            if request.method == 'POST' and origin and not same_origin_request(request, origin):
                 from fastapi.responses import JSONResponse
                 return JSONResponse({'detail': '동일 출처 요청만 허용합니다.'}, status_code=403)
         response = await call_next(request)
@@ -110,7 +116,7 @@ def create_app(db_path=None, settings_path=None):
     async def configure_openai(request: Request):
         if not local_request(request):
             raise HTTPException(403, 'API 키는 이 컴퓨터에서 직접 접속해 설정하세요.')
-        if request.headers.get('origin', '').rstrip('/') != str(request.base_url).rstrip('/'):
+        if not same_origin_request(request, request.headers.get('origin', '')):
             raise HTTPException(403, '동일 출처 설정 화면에서 입력하세요.')
         raw = await request.body()
         if len(raw) > 4096:
