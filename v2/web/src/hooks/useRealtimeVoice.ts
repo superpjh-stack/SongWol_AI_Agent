@@ -32,7 +32,6 @@ export function useRealtimeVoice(token:string,lot:string,onTurn:(turn:Turn)=>voi
   if(toolReady.current)toolReady.current=false;
   else {
    addressed.current=queue.current.shift()||'';
-   if(addressed.current)channel.current.send(JSON.stringify({type:'conversation.item.create',item:{type:'message',role:'user',content:[{type:'input_text',text:addressed.current}]}}));
   }
   if(!addressed.current){setState('listening');return}
   responsePending.current=true;setState('responding');
@@ -65,9 +64,10 @@ export function useRealtimeVoice(token:string,lot:string,onTurn:(turn:Turn)=>voi
     const itemId=String(event.item_id||'');
     if(!itemId||heard.current.has(itemId))return;heard.current.add(itemId);
     const transcript=String(event.transcript||'').trim();
-    // Retain only explicitly addressed text, in response order, in the conversation.
-    channel.current?.send(JSON.stringify({type:'conversation.item.delete',item_id:itemId}));
     if(!callsSongwol(transcript)){
+     // Keep ambient speech out of the conversation; addressed audio is already
+     // a conversation item, so do not delete and re-send it as text.
+     channel.current?.send(JSON.stringify({type:'conversation.item.delete',item_id:itemId}));
      if(!addressed.current)setState('listening');return;
     }
     callback.current({role:'user',text:transcript});track('transcript_ready');queue.current.push(transcript);respond();

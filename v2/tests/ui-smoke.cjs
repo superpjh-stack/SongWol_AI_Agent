@@ -223,6 +223,7 @@ const assert = require('node:assert/strict');
  assert.equal(await page.locator('.message.user').count(),0);
  await voiceEvent({type:'conversation.item.input_audio_transcription.completed',item_id:'named1',transcript:'송월아, 오늘 재고 알려줘'});
  assert.equal(await responseCount(),1);
+ assert.equal(await page.evaluate(()=>window.__voice.sent.filter(e=>e.type==='conversation.item.create').length),0);
  await voiceEvent({type:'conversation.item.input_audio_transcription.completed',item_id:'named1',transcript:'송월아, 오늘 재고 알려줘'});
  assert.equal(await responseCount(),1); // Duplicate recognition cannot double the answer.
  await voiceEvent({type:'response.output_audio_transcript.done',transcript:'테스트 재고 답변'});
