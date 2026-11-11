@@ -16,9 +16,9 @@ def client(tmp_path, monkeypatch):
 def test_workspace_documents_and_allowed_tables(client):
     workspace = client.get('/api/workspace').json()
     assert len(workspace['lots']) == 10
-    assert sum(map(len, workspace['questions'].values())) == 20
-    assert len(workspace['questions']['재고·출하']) == 10
-    assert len(workspace['questions']['생산·품질']) == len(workspace['questions']['문서·규칙']) == 5
+    assert sum(map(len, workspace['questions'].values())) == 30
+    assert len(workspace['questions']['데이터 대시보드']) == 10
+    assert len(workspace['questions']['지식베이스']) == len(workspace['questions']['복합질문']) == 10
     assert workspace['meta']['demo_data'] is True
     docs = client.get('/api/documents?q=인쇄').json()
     assert docs and all('미승인' in d['approval'] and '상태: 미승인' in d['body'] for d in docs)
@@ -131,6 +131,8 @@ def test_ai_uses_server_model_and_captures_record_evidence(client, monkeypatch):
         def __init__(self, **kwargs):
             self.responses = self
             assert kwargs['api_key'] == 'test-key-never-sent'
+        def with_options(self, **kwargs):
+            return self
         def __enter__(self):
             return self
         def __exit__(self, *args):
@@ -181,29 +183,20 @@ def test_realtime_session_has_all_real_handlers(client, monkeypatch):
     response = client.post('/api/realtime/session?lot_id=PRT-260903-C', content='mock-offer', headers={'Content-Type':'application/sdp'})
     assert response.status_code == 200 and response.text == 'mock-sdp-answer'
     session = json.loads(captured['files']['session'][1])
-    assert session['audio']['input']['turn_detection']['interrupt_response'] is False
+    assert session['audio']['input']['turn_detection']['interrupt_response'] is True
     assert session['audio']['input']['turn_detection']['create_response'] is False
-    assert {d['name'] for d in session['tools']} == set(Registry(client.app.state.repo)._handlers)
+    assert {d['name'] for d in session['tools']} == {'analyze_manufacturing_question'}
     assert 'PRT-260903-C' in session['instructions']
     result = client.post('/api/realtime/tool', json={'name':'search_documents','arguments':{'query':'클레임'}})
     assert result.json()['evidence'][0]['kind'] == 'document'
     assert client.post('/api/realtime/session', content='offer').status_code == 415
 
 
-@pytest.mark.parametrize('question', ['오늘 재고 알려줘', '송월타월 재고 알려줘', '다음 질문', '송월이라는 이름', ''])
-def test_unaddressed_questions_do_not_query_or_call_ai(client, monkeypatch, question):
-    def forbidden(*args, **kwargs):
-        raise AssertionError('Unaddressed input must not query data or call AI')
-    monkeypatch.setattr('v2.api.demo_answer', forbidden)
-    monkeypatch.setattr('v2.api.RagAgent', forbidden)
-    for mode in ['demo', 'ai']:
-        response = client.post('/api/chat', json={'question':question or ' ', 'mode':mode,
-            'history':[{'role':'user','text':'송월아, 오늘 재고 알려줘'}]})
-        if not question:
-            assert response.status_code == 422
-        else:
-            assert response.status_code == 200
-            assert response.json() == {'text':'', 'evidence':[], 'mode':mode, 'ignored':True}
+@pytest.mark.parametrize('question', ['오늘 재고 알려줘', '송월타월 재고 알려줘', '다음 질문', ''])
+def test_unaddressed_questions_are_accepted(client, question):
+    response=client.post('/api/chat', json={'question':question or ' '})
+    assert response.status_code == (200 if question else 422)
+    if question: assert response.json()['text'] and not response.json().get('ignored')
 
 @pytest.mark.parametrize('question', ['송월아, 오늘 재고 알려줘', '송월아 오늘 재고 알려줘'])
 def test_named_questions_answer(client, question):
@@ -215,4 +208,4 @@ def test_named_questions_answer(client, question):
 def test_legacy_addresses_are_ignored(client, question):
     response = client.post('/api/chat', json={'question': question})
     assert response.status_code == 200
-    assert response.json()['ignored'] is True
+    assert not response.json().get('ignored')

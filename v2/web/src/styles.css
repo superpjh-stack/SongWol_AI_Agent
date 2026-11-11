@@ -1531,3 +1531,5 @@ dialog form .primary {
 .daily-summary strong span { display: block; font-size: 24px; margin-top: 10px; }
 .daily-date { margin-top: 14px; }
 @media(max-width:600px) { .daily-logistics { padding: 18px 14px; } .daily-logistics .operations-heading .field-label { width: 100%; } }
+
+.assistant-content{min-height:0;overflow:hidden}.chat-toolbar,.composer-area{flex-shrink:0}.conversation{min-height:0;overflow:auto;overscroll-behavior:contain;overflow-anchor:none}.simple-welcome{height:100%;min-height:120px;display:flex;align-items:center;justify-content:center;margin:0;text-align:center}.simple-welcome h2{font-size:clamp(22px,3vw,32px)}.comparison-table h3{font-size:14px}.comparison-table .table-scroll{overflow:auto;max-width:100%;max-height:360px}.comparison-table table{border-collapse:collapse;white-space:nowrap;font-size:12px}.comparison-table td,.comparison-table th{padding:12px;border:1px solid #dbe5e7}.comparison-table th{background:#e7f1f3}.message details{margin-top:12px}.question-tabs{flex-wrap:wrap}

@@ -22,10 +22,10 @@ def test_import_counts_and_mes_recommendations(tmp_path):
     with TestClient(app, base_url='http://localhost', client=('127.0.0.1', 123)) as client:
         workspace = client.get('/api/workspace').json()
         assert workspace['meta']['demo_data'] is False
-        assert len(workspace['questions']['MES 실데이터']) == 10
-        assert workspace['questions']['MES 실데이터'][0].startswith('송월아')
+        assert len(workspace['questions']['데이터 대시보드']) == 10
+        assert not workspace['questions']['데이터 대시보드'][0].startswith('송월아')
         assert len(client.get('/api/tables/mes_inventory').json()) == 10
-        response = client.post('/api/chat', json={'question': workspace['questions']['MES 실데이터'][0]})
+        response = client.post('/api/chat', json={'question': workspace['questions']['데이터 대시보드'][0]})
         assert response.status_code == 200
         data = response.json()
         assert data['evidence'][0]['demo_data'] is False

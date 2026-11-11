@@ -104,7 +104,7 @@ class Registry(SongwolToolRegistry):
 
     def execute(self, name, arguments):
         payload = json.loads(super().execute(name, arguments))
-        is_mes = bool(getattr(self.repository, 'is_mes_data', False))
+        is_mes = bool(getattr(self.repository, 'is_mes_data', False)) and name.startswith('get_mes_')
         payload.update(source='송월타월 MES XLSX 원본' if is_mes else '송월타월 SQLite / sample_docs 검증용 샘플', retrieved_at=stamp(), demo_data=not is_mes)
         self.evidence.append({'title': name, 'kind': 'document' if name == 'search_documents' else 'record', **payload})
         return json.dumps(payload, ensure_ascii=False, default=str)
