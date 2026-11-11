@@ -1,3 +1,4 @@
+import {apiPath} from './apiPath';
 export type Evidence = {title:string;kind:string;result?:unknown;source?:string;retrieved_at?:string;error?:string};
 export type Message = {role:'user'|'assistant';text:string;mode?:string;evidence?:Evidence[];retrieved_at?:string;effective_lot?:string;request_coverage?:{request:string;status:string}[];comparison_tables?:{title:string;columns:string[];rows:string[][]}[]};
 export type Document = {id:string;title:string;revision:string;approval:string;body:string};
@@ -13,7 +14,7 @@ export class ApiError extends Error {
  constructor(message:string,public status:number){super(message);this.name='ApiError'}
 }
 export async function request<T>(token:string,path:string,options:RequestInit={}):Promise<T>{
- const response=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...options.headers}});
+ const response=await fetch(apiPath('/api'+path),{...options,headers:{'Content-Type':'application/json',Authorization:'Bearer '+token,...options.headers}});
  const data=await response.json();
  if(!response.ok)throw new ApiError(data.detail||'요청을 처리하지 못했습니다.',response.status);
  return data as T;

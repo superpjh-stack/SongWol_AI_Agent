@@ -10,6 +10,9 @@ services:
     ports:
       - "8513:8513"
     environment:
+      SONGWOL_DB_PATH: ${SONGWOL_DB_PATH:-/app/data/songwol_demo.db}
+      SONGWOL_SETTINGS_PATH: /app/data/server.env
+      SONGWOL_PUBLIC_ORIGINS: ${SONGWOL_PUBLIC_ORIGINS:-}
       COCKPIT_ACCESS_TOKEN: ${COCKPIT_ACCESS_TOKEN:?Set a long random access code in the Docker Manager environment}
       OPENAI_MODEL: ${OPENAI_MODEL:-gpt-5.6}
       OPENAI_REALTIME_MODEL: ${OPENAI_REALTIME_MODEL:-gpt-realtime-2.1}

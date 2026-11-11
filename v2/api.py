@@ -26,7 +26,8 @@ from .openai_settings import save_api_key
 from . import daily
 
 ROOT = Path(__file__).resolve().parents[1]
-load_dotenv(ROOT / '.env')
+SETTINGS_PATH = Path(os.getenv('SONGWOL_SETTINGS_PATH', str(ROOT / '.env')))
+load_dotenv(SETTINGS_PATH)
 
 class Question(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
@@ -57,7 +58,7 @@ def create_app(db_path=None, settings_path=None):
     if not app.state.repo.is_mes_data:
         daily.seed_daily(app.state.repo)
     capacity = BoundedSemaphore(3)
-    settings_file = Path(settings_path) if settings_path is not None else ROOT / '.env'
+    settings_file = Path(settings_path) if settings_path is not None else SETTINGS_PATH
 
     def require_access(request):
         expected = os.getenv('COCKPIT_ACCESS_TOKEN', '')
