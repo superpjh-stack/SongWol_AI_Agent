@@ -1,6 +1,8 @@
-# 송월타월 서울상사 AI Agent V2
+# SongWol_AI_Agent — 송월타월 서울상사 AI Agent V2
 
 `new-agent-maker` 스킬의 평창꽃순이김치 사례를 활용해 송월타월용 대화·현장·LOT·자료 화면을 구성했습니다. React 19 · TypeScript · Vite 7 + FastAPI 기반이며 기존 송월 SQLite 데이터·읽기 전용 조회 도구와 Streamlit V1(`app.py`)을 유지합니다.
+
+최신 `make_best_agent` 업그레이드: LangGraph 복합질문 분석, 추천 질문 30개, 후속 LOT 문맥, 음성 끼어들기 처리 및 비교표 중심 모바일 화면을 적용했습니다. [변경 및 검증 기록](docs/upgrades/2026-11-11-make-best-agent.md)을 참고하세요.
 
 ## V2 실행
 
