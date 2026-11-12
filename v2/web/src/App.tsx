@@ -1,6 +1,8 @@
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {Settings,RefreshCw} from 'lucide-react';
 import {request,stored,save,ApiError,type Workspace,type HistoryEntry,type View} from './types';
+import TowelStudio from './components/TowelStudio';
+import ReportPanel from './components/ReportPanel';
 import Assistant,{type AssistantHandle} from './components/Assistant';
 import WorkspaceShell from './components/WorkspaceShell';
 import ResourceLibrary from './components/ResourceLibrary';
@@ -12,7 +14,7 @@ import {loadAccessCode,rememberAccessCode,forgetAccessCode} from './accessCode';
 
 function readRoute(){
  const [raw,encoded]=location.hash.replace(/^#\/?/,'').split('/');
- const view:View=['assistant','home','lots','library'].includes(raw)?raw as View:'assistant';
+ const view:View=['assistant','home','lots','library','studio','reports'].includes(raw)?raw as View:'assistant';
  try{return {view,lot:encoded?decodeURIComponent(encoded):''}}catch{return {view:'assistant' as View,lot:''}}
 }
 export default function App(){
@@ -56,6 +58,8 @@ export default function App(){
  return <><WorkspaceShell view={route.view} lot={route.lot} workspace={workspace} history={history} busy={busy} refreshing={refreshing} onNavigate={view=>{setQueued(null);navigate(view)}} onAsk={ask} onReset={()=>assistant.current?.reset()} onSettings={()=>setSettings(true)} onRefresh={()=>setRefresh(v=>v+1)} resources={<ResourceLibrary key={refresh} token={token} workspace={workspace} compact/>} assistant={<Assistant key={token+'|'+route.lot} ref={assistant} token={token} workspace={workspace} mode={mode} onMode={setMode} lot={route.lot} active={route.view==='assistant'} onLot={lot=>{setQueued(null);navigate('assistant',lot)}} onHistory={remember} onBusy={setBusy} onSettings={()=>setSettings(true)}/>}>
   {storageWarning&&<p className="warning" role="status">{storageWarning}</p>}
   {error&&<div className="error refresh-error" role="alert">새로고침에 실패했습니다. 기존 조회 결과를 표시합니다. {error}<button onClick={()=>setRefresh(v=>v+1)}>다시 조회</button></div>}
+  {route.view==='studio'&&<TowelStudio key={token} token={token} workspace={workspace}/>}
+  {route.view==='reports'&&<ReportPanel key={token} token={token} mes={!workspace.meta.demo_data}/>}
   {route.view==='home'&&<OperationsHome key={refresh} token={token} workspace={workspace} onLot={lot=>navigate('lots',lot)} onAsk={ask}/>}
   {route.view==='lots'&&<LotWorkspace key={refresh} token={token} workspace={workspace} lot={route.lot} onSelect={lot=>navigate('lots',lot)} onAsk={ask}/>}
   {route.view==='library'&&<ResourceLibrary key={refresh} token={token} workspace={workspace}/>}

@@ -23,7 +23,8 @@ from .compound import analyze, context_lot, COMPOUND_QUESTIONS, DOCUMENT_QUESTIO
 from .domain import QUESTIONS, TABLES, Registry, demo_answer, questions_for, tables_for, stamp
 from .knowledge import documents
 from .openai_settings import save_api_key
-from . import daily
+from . import daily, reports
+from .studio import StudioRequest, build_studio
 
 ROOT = Path(__file__).resolve().parents[1]
 SETTINGS_PATH = Path(os.getenv('SONGWOL_SETTINGS_PATH', str(ROOT / '.env')))
@@ -53,10 +54,11 @@ def same_origin_request(request: Request, origin: str) -> bool:
 
 
 def create_app(db_path=None, settings_path=None):
-    app = FastAPI(title='송월타월 AI Agent V2')
+    app = FastAPI(title='송월타월 AI Agent V3')
     app.state.repo = SongwolRepository(db_path or os.getenv('SONGWOL_DB_PATH', str(ROOT / 'data/songwol_demo.db')))
     if not app.state.repo.is_mes_data:
         daily.seed_daily(app.state.repo)
+    reports.install(app)
     capacity = BoundedSemaphore(3)
     settings_file = Path(settings_path) if settings_path is not None else SETTINGS_PATH
 
@@ -99,7 +101,7 @@ def create_app(db_path=None, settings_path=None):
 
     @app.get('/api/health')
     def health():
-        return {'status': 'ok', 'version': '2.0'}
+        return {'status': 'ok', 'version': '3.0'}
 
     @app.get('/api/workspace')
     def workspace(request: Request):
@@ -184,6 +186,24 @@ def create_app(db_path=None, settings_path=None):
         check_lot(lot_id)
         return app.state.repo.trace_lot(lot_id)
 
+    @app.post('/api/studio')
+    def studio(body: StudioRequest, request: Request):
+        try:
+            if body.use_ai and body.mode == 'ideas':
+                key = require_key(request)
+                if not capacity.acquire(blocking=False):
+                    raise HTTPException(429, '다른 요청을 처리 중입니다. 잠시 후 다시 시도하세요.')
+                try:
+                    with OpenAI(api_key=key, timeout=35, max_retries=0) as client:
+                        return build_studio(app.state.repo, body, client, os.getenv('OPENAI_MODEL', 'gpt-5.6'))
+                finally:
+                    capacity.release()
+            return build_studio(app.state.repo, body)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except OpenAIError as exc:
+            raise HTTPException(502, 'AI 기획 생성에 실패했습니다. 연결 설정을 확인하세요.') from exc
+
     @app.post('/api/chat/reset')
     def reset():
         return {'status': 'ok'}  # Stateless: conversation exists only in the requesting browser.
@@ -194,6 +214,15 @@ def create_app(db_path=None, settings_path=None):
             raise HTTPException(422, '질문을 입력하세요.')
         if not calls_songwol(body.question):
             return {'text': '', 'evidence': [], 'mode': body.mode, 'ignored': True}
+        try:
+            report_input = reports.chat_request(body.question, body.lot_id)
+            if report_input:
+                if report_input.kind == 'daily-production' and not report_input.business_date:
+                    return {'text':'생산일을 선택하고 보고서를 생성하세요.', 'report_picker':'daily-production', 'mode':body.mode}
+                report = reports.create(app.state.repo, report_input)
+                return {'text':report['title']+' 생성 완료. 원본 기준과 미입력 항목을 확인하세요.', 'report':report, 'mode':body.mode}
+        except ValueError as exc:
+            raise HTTPException(422,str(exc)) from exc
         history = [{'role':h.get('role'), 'text':str(h.get('text',''))[:4000]} for h in body.history if h.get('role') in {'user','assistant'}]
         try:
             lot, clarification = context_lot(body.question, body.lot_id, history)
